@@ -48,15 +48,24 @@ Refer to each MCP server's documentation for installation commands.
 
 ## Installation
 
-1. Clone this repository into your workspace:
-   ```bash
-   git clone https://github.com/ibranibeny/Agent-Azure-Calculator-Generator.git
-   ```
+### Option A: Install into an existing project (recommended)
 
-2. Open in VS Code:
-   ```bash
-   code Agent-Azure-Calculator-Generator
-   ```
+Use `npx` to scaffold the agent files into your current workspace without overwriting existing files:
+
+```bash
+npx degit ibranibeny/Agent-Azure-Calculator-Generator/.github .github --force
+npx degit ibranibeny/Agent-Azure-Calculator-Generator/scripts scripts
+npx degit ibranibeny/Agent-Azure-Calculator-Generator/samples samples
+```
+
+This copies only the `.github/` (agent, skills, instructions, prompts), `scripts/`, and `samples/` folders into your existing project — no git history, no conflicts.
+
+### Option B: Clone as a standalone workspace
+
+```bash
+git clone https://github.com/ibranibeny/Agent-Azure-Calculator-Generator.git
+code Agent-Azure-Calculator-Generator
+```
 
 3. Install Python dependencies:
    ```bash
