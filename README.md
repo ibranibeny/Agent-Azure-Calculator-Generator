@@ -103,6 +103,176 @@ The agent follows a structured 8-turn workflow:
 | 7 | Calculator Automation | Azure Pricing Calculator estimate |
 | 8 | Final Report | Assessment document with all findings |
 
+## Skills (Deep Dive)
+
+Skills are procedural knowledge files (`.github/skills/<name>/SKILL.md`) that teach the agent **how** to perform complex multi-step tasks. Unlike instructions (which provide rules), skills provide step-by-step procedures with decision trees, error handling, and validation gates.
+
+### 1. Excel Data Ingestion (`excel-data-ingestion`)
+Parses server inventory from Excel via the **Excel MCP Server** (COM automation). Handles:
+- **Single-file format**: 34-column consolidated inventory (see `samples/server-inventory.xlsx`)
+- **Two-file format**: Azure Migrate Rightsizing Export + App-to-Server Export
+- IRM/AIP-protected workbooks (opens with `show: true` for credential prompts)
+- Automatic header detection (row 1 vs row 2 vs row 6 depending on format)
+- Column fuzzy-matching when headers don't exactly match expected names
+
+### 2. Excel-to-CSV Analysis (`excel-to-csv-analysis`)
+Correlates server data from multiple sheets/files and produces a unified CSV:
+- Joins by server hostname (primary key)
+- Enriches with OS version, SQL detection, environment, power state
+- Groups servers by application/workload for spoke segmentation
+- Handles multi-app servers (one server hosting multiple applications)
+- Flags unclassified servers for user decision
+
+### 3. Azure Calculator Automation (`azure-calculator-automation`)
+**Automates the Azure Pricing Calculator at https://azure.microsoft.com/en-us/pricing/calculator/ using the Playwright MCP Server.** This is the flagship skill that generates formal, shareable cost estimates:
+
+#### How It Works (Playwright MCP Flow):
+```
+1. browser_navigate → Open Azure Pricing Calculator URL
+2. browser_click    → Select "Virtual Machines" product card
+3. browser_fill_form → Configure VM: region, OS, tier, instance, payment model
+4. browser_click    → Add managed disks (Premium SSD, Standard SSD, etc.)
+5. browser_click    → Enable Azure Hybrid Benefit toggle (if licensed)
+6. browser_click    → Set payment model (Pay-as-you-go / 1yr RI / 3yr RI)
+7. Repeat steps 2-6  → For EACH server in the inventory
+8. browser_snapshot → Capture final estimate summary
+9. browser_take_screenshot → Save estimate as PNG for proposal docs
+10. browser_evaluate → Extract total monthly/annual cost from DOM
+```
+
+#### Key Capabilities:
+- **Batch processing**: Adds all servers from CSV inventory to a single Calculator estimate
+- **Per-server configuration**: Each VM gets its own SKU, disks, region, and payment model
+- **Hybrid Benefit**: Automatically enables AHUB for Windows Server and SQL licenses
+- **Screenshots**: Captures estimate at each stage for audit trail
+- **Shareable URL**: Extracts the Calculator's shareable estimate link
+- **Error recovery**: Retries on page load failures, handles Calculator UI changes
+
+#### Example Agent Interaction:
+```
+Turn 7: "Automating Azure Pricing Calculator..."
+→ Opening browser to Calculator
+→ Adding VM: WEB-PROD01 (Standard_D2as_v5, East US, Windows, 3yr RI)
+→ Adding VM: SQL-PROD01 (Standard_E8as_v5, East US, Windows+SQL, 3yr RI)
+→ Adding managed disks: 2× S10 (100GB each)
+→ Enabling Azure Hybrid Benefit...
+→ Screenshot saved: output/cost-estimates/calculator-estimate.png
+→ Shareable URL: https://azure.com/e/abc123...
+→ Total estimated monthly cost: $1,247.32
+```
+
+### 4. Calculator from CSV (`calculator-from-csv`)
+A streamlined variant that takes a pre-generated CSV file and drives the Calculator directly:
+- Reads each row from the server inventory CSV
+- Maps CSV columns to Calculator form fields
+- Supports batch mode (all servers in one estimate) or per-workload estimates
+- Validates Calculator totals against pre-calculated CSV cost columns
+
+### 5. Azure Cost & Availability (`azure-cost-availability`)
+Queries live Azure pricing and regional SKU availability via the **Azure MCP Server**:
+- Checks if a VM SKU is available in the target region
+- Compares Pay-as-you-go vs 1-year vs 3-year Reserved Instance pricing
+- Validates disk type availability (Premium SSD requires specific VM tiers)
+- Falls back to alternative SKUs if primary choice is unavailable
+- Caches pricing data to minimize API calls during batch sizing
+
+### 6. CSV-Source Reconciliation (`csv-source-reconciliation`)
+**Mandatory pre-gate** that runs BEFORE Calculator automation. Validates:
+- Total server count matches source Excel
+- No servers dropped during correlation
+- Disk counts match (sum of all comma-separated disk entries)
+- Field values spot-checked against source (cores, RAM, storage)
+- OS type preserved correctly through the pipeline
+
+### 7. Accuracy Validation (`accuracy-validation`)
+Post-generation validation comparing Calculator output against source:
+- Row-level comparison of CSV vs Excel source
+- Cost sanity checks (no $0 costs for production servers)
+- SKU family consistency (SQL servers → E-series confirmed)
+- Region consistency (all servers targeting same region)
+- Produces accuracy percentage and error report
+
+### 8. Best Practice Architecture (`best-practice-architecture`)
+Validates the designed architecture against Microsoft Learn best practices:
+- Hub-spoke topology compliance (single hub, isolated spokes)
+- Subnet sizing (minimum /26 for AzureFirewallSubnet)
+- NSG placement on every subnet
+- Gateway transit enabled on hub peering
+- Infrastructure servers in hub SharedServices (not in spokes)
+- References official docs via **Microsoft Learn MCP** for validation
+
+---
+
+## Azure Pricing Calculator Automation (Detailed)
+
+This section provides a complete reference for how the agent automates Azure's Pricing Calculator using Playwright MCP.
+
+### Prerequisites for Calculator Automation
+
+| Requirement | Details |
+|-------------|---------|
+| Playwright MCP Server | Must be running and connected (`microsoft_pla` or `microsoft_pla2`) |
+| Browser | Chromium-based browser available to Playwright |
+| Network | Internet access to `azure.microsoft.com` |
+| CSV Input | Generated server inventory with SKU, region, disk, and cost columns |
+
+### Calculator Automation Workflow
+
+```mermaid
+graph TD
+    A[CSV Server Inventory] --> B[Open Azure Calculator]
+    B --> C[Select Virtual Machines]
+    C --> D[Configure First VM]
+    D --> E{More Servers?}
+    E -->|Yes| C
+    E -->|No| F[Add Managed Disks]
+    F --> G[Enable Hybrid Benefit]
+    G --> H[Set Payment Model]
+    H --> I[Take Screenshot]
+    I --> J[Extract Shareable URL]
+    J --> K[Save to output/cost-estimates/]
+```
+
+### MCP Tools Used
+
+| Tool | Purpose |
+|------|---------|
+| `browser_navigate` | Open Calculator URL |
+| `browser_snapshot` | Get page DOM for element identification |
+| `browser_click` | Select products, toggle switches, expand sections |
+| `browser_fill_form` | Enter VM name, select dropdowns (region, OS, tier) |
+| `browser_select_option` | Choose from Calculator dropdown menus |
+| `browser_type` | Enter numeric values (hours, quantity) |
+| `browser_take_screenshot` | Capture estimate for proposal documents |
+| `browser_evaluate` | Extract cost totals from page JavaScript |
+| `browser_wait_for` | Wait for Calculator to recalculate after changes |
+
+### Output Artifacts
+
+After Calculator automation completes, you'll find:
+
+```
+output/cost-estimates/
+├── calculator-estimate.png          # Full estimate screenshot
+├── calculator-per-workload/         # Per-spoke estimates (if segmented)
+│   ├── spoke-erp-prod.png
+│   └── spoke-middleware.png
+├── estimate-url.txt                 # Shareable Calculator URL
+└── cost-summary.json                # Extracted costs (monthly/annual/3yr)
+```
+
+### Error Handling
+
+| Scenario | Agent Behavior |
+|----------|----------------|
+| Calculator page timeout | Retry navigation up to 3 times |
+| SKU not in Calculator dropdown | Fall back to closest available SKU, note in report |
+| Browser crash | Restart browser session, resume from last completed VM |
+| Price discrepancy vs API | Flag in validation report, use Calculator price as authoritative |
+| Rate limiting | Add delays between VM additions (2-3 seconds) |
+
+---
+
 ## Directory Structure
 
 ```
@@ -133,6 +303,7 @@ scripts/
 ├── vm_sizing.py                          # VM right-sizing logic
 └── enrich_csv.py                         # CSV enrichment from Excel
 samples/
+├── server-inventory.xlsx                 # Sample Excel input (5 servers)
 └── excel-format-guide.md                 # Excel input format documentation
 output/                                   # Generated outputs (gitignored)
 ├── migration-plan/                       # CSV and assessment reports
