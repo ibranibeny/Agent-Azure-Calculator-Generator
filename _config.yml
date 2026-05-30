@@ -1,0 +1,51 @@
+title: "Agent Azure Calculator Generator"
+description: "VS Code custom agent (@BoM-Infra-calculator) for Azure infrastructure migration with hub-and-spoke network architecture, VM right-sizing, and automated Azure Pricing Calculator estimates."
+baseurl: "/Agent-Azure-Calculator-Generator"
+url: "https://ibranibeny.github.io"
+
+remote_theme: just-the-docs/just-the-docs@v0.10.0
+
+color_scheme: light
+search_enabled: true
+search.button: true
+
+heading_anchors: true
+permalink: pretty
+
+aux_links:
+  "GitHub Repo":
+    - "https://github.com/ibranibeny/Agent-Azure-Calculator-Generator"
+
+aux_links_new_tab: true
+
+nav_sort: case_insensitive
+back_to_top: true
+back_to_top_text: "Back to top"
+
+footer_content: "Azure Calculator Generator Agent &mdash; by Ben Yibrani"
+
+exclude:
+  - scripts/
+  - samples/
+  - output/
+  - specs/
+  - "*.py"
+  - "*.sh"
+  - Gemfile.lock
+
+mermaid:
+  version: "11"
+
+callouts:
+  warning:
+    title: Warning
+    color: red
+  note:
+    title: Note
+    color: blue
+  tip:
+    title: Tip
+    color: green
+  important:
+    title: Important
+    color: yellow
