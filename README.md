@@ -50,7 +50,7 @@ Refer to each MCP server's documentation for installation commands.
 
 1. Clone this repository into your workspace:
    ```bash
-   git clone https://github.com/your-org/Agent-Azure-Calculator-Generator.git
+   git clone https://github.com/ibranibeny/Agent-Azure-Calculator-Generator.git
    ```
 
 2. Open in VS Code:
